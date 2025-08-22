@@ -1,5 +1,5 @@
 #include "sys.h"
-#include "utils/NodeMemoryResource.h"
+#include "memory/NodeMemoryResource.h"
 #include <deque>
 #include <cstdlib>
 #include <new>
@@ -21,7 +21,7 @@ struct DequePoolAllocator
   using value_type = T;
   using map_pointer_type = T*;
 
-  DequePoolAllocator(utils::NodeMemoryResource& nmr) : m_nmr(&nmr) { }
+  DequePoolAllocator(memory::NodeMemoryResource& nmr) : m_nmr(&nmr) { }
   DequePoolAllocator(DequePoolAllocator const&) = default;
 
   // This allocator also supports allocating blocks with map_pointer_type's, for which we use a normal std::allocator.
@@ -42,7 +42,7 @@ struct DequePoolAllocator
   }
 
  private:
-  utils::NodeMemoryResource* m_nmr;
+  memory::NodeMemoryResource* m_nmr;
 };
 
 template<typename T>
@@ -64,8 +64,8 @@ int main()
 
   AIStatefulTask* ptr = nullptr;
 
-  utils::MemoryPagePool mpp(0x8000);
-  utils::NodeMemoryResource nmr(mpp);
+  memory::MemoryPagePool mpp(0x8000);
+  memory::NodeMemoryResource nmr(mpp);
   DequePoolAllocator<AIStatefulTask*> alloc(nmr);
   {
     std::deque<AIStatefulTask*, decltype(alloc)> test_deque(alloc);

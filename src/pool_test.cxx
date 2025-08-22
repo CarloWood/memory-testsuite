@@ -1,10 +1,10 @@
 #include "sys.h"
-#include "debug.h"
-#include "utils/NodeMemoryPool.h"
+#include "memory/NodeMemoryPool.h"
 #include <vector>
 #include <algorithm>
 #include <cstring>
 #include <random>
+#include "debug.h"
 
 unsigned int seed = 4321;
 
@@ -15,7 +15,7 @@ struct Foo {
 void test1()
 {
   DoutEntering(dc::notice, "test1()");
-  utils::NodeMemoryPool pool(128);
+  memory::NodeMemoryPool pool(128);
 
   size_t num_mallocs = 0;
   std::vector<void*> ptrs;
@@ -58,7 +58,7 @@ struct Bar {
   Bar(int n_) : n(n_) { }
   ~Bar() { std::memset(this, 0, 30); }
 
-  void operator delete(void* ptr) { utils::NodeMemoryPool::static_free(ptr); }
+  void operator delete(void* ptr) { memory::NodeMemoryPool::static_free(ptr); }
 };
 
 struct ExtendedBar : public Bar {
@@ -68,7 +68,7 @@ struct ExtendedBar : public Bar {
 void test2()
 {
   DoutEntering(dc::notice, "test2()");
-  utils::NodeMemoryPool pool(32, sizeof(Bar) + 8);          // Allocate chunks that are larger than the object.
+  memory::NodeMemoryPool pool(32, sizeof(Bar) + 8);          // Allocate chunks that are larger than the object.
   Bar* bar = new(pool) Bar(42);
   ASSERT(bar->n == 42);
   reinterpret_cast<ExtendedBar*>(bar)->m_x = 0x1234;        // Secret space after the object ;).

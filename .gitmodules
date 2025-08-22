@@ -10,3 +10,6 @@
 	path = cwm4
 	url = https://github.com/CarloWood/cwm4.git
 	branch = master
+[submodule "memory"]
+	path = memory
+	url = https://github.com/CarloWood/memory.git

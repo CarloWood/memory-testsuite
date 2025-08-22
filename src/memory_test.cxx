@@ -1,15 +1,15 @@
 #include "sys.h"
-#include <condition_variable>
-#include "utils/MemoryPagePool.h"
-#include "debug.h"
+#include "memory/MemoryPagePool.h"
 #include "cwds/benchmark.h"
 #include <boost/thread/thread.hpp>
+#include <condition_variable>
+#include "debug.h"
 
 int const iterations = 1000000;
 int const producer_thread_count = 4;
 int const consumer_thread_count = 4;
 int const total_threads = producer_thread_count + consumer_thread_count;
-utils::MemoryPagePool mpp(0x1000, 2, 1024 * 1024);
+memory::MemoryPagePool mpp(0x1000, 2, 1024 * 1024);
 
 std::mutex cvm;
 std::condition_variable cv;
