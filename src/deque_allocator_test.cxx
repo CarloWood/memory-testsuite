@@ -60,6 +60,7 @@ bool operator!=(DequePoolAllocator<T> const& alloc1, DequePoolAllocator<T> const
 int main()
 {
   Debug(NAMESPACE_DEBUG::init());
+  Dout(dc::notice, "Entering main()...");
 
   AIStatefulTask* ptr = nullptr;
 
