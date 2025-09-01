@@ -32,11 +32,11 @@ class MappedSegregatedStorage : public memory::MappedSegregatedStorage
      * End of inserted debug code.
      */
 
-    // Load the current value of m_head_tag into `head_tag`.
+    // Load the current value of head_tag_ into `head_tag`.
     // Use std::memory_order_acquire to synchronize with the std::memory_order_release in deallocate,
     // so that value of `next` read below will be the value written in deallocate corresponding to
     // this head value.
-    PtrTag head_tag(this->m_head_tag.load(std::memory_order_acquire));
+    PtrTag head_tag(this->head_tag_.load(std::memory_order_acquire));
     while (head_tag != PtrTag::end_of_list)
     {
       PtrTag new_head_tag = head_tag.next();
@@ -65,11 +65,11 @@ class MappedSegregatedStorage : public memory::MappedSegregatedStorage
           new_head_tag = PtrTag::end_of_list;
       }
       // The std::memory_order_acquire is used in case of failure and required for the next
-      // read of m_next at the top of the current loop (the previous line).
+      // read of next_ at the top of the current loop (the previous line).
       if (AI_LIKELY(this->CAS_head_tag(head_tag, new_head_tag, std::memory_order_acquire)))
         // Return the old head.
         return head_tag.ptr();
-      // m_head_tag was changed (the new value is now in `head_tag`). Try again with the new value.
+      // head_tag_ was changed (the new value is now in `head_tag`). Try again with the new value.
     }
     // Reached the end of the list.
     return nullptr;
@@ -85,7 +85,7 @@ class MemoryPool : public memory::MemoryMappedPool
  public:
   // And use it.
   // These are exact copies of memory::MemoryMappedPool::allocate and memory::MemoryMappedPool::deallocate.
-  void* allocate() override { return mss_.allocate(mapped_base_, mapped_size_, m_block_size); }
+  void* allocate() override { return mss_.allocate(mapped_base_, mapped_size_, block_size_); }
   void deallocate(void* ptr) override { mss_.deallocate(ptr); }
 
   // Inherit all constructors.
@@ -93,7 +93,7 @@ class MemoryPool : public memory::MemoryMappedPool
       size_t file_size = 0, Mode mode = Mode::persistent, bool zero_init = false) :
     memory::MemoryMappedPool(filename, block_size, file_size, mode, zero_init)
   {
-    // Set m_head to point to the start of mapped memory.
+    // Set head_tag_ to point to the start of mapped memory.
     mss_.initialize(mapped_base_);
   }
 };
@@ -116,11 +116,11 @@ class SimpleSegregatedStorage : public memory::SimpleSegregatedStorage
 
     for (;;)
     {
-      // Load the current value of m_head_tag into `head_tag`.
+      // Load the current value of head_tag_ into `head_tag`.
       // Use std::memory_order_acquire to synchronize with the std::memory_order_release in deallocate,
       // so that value of `next` read below will be the value written in deallocate corresponding to
       // this head value.
-      PtrTag head_tag(m_head_tag.load(std::memory_order_acquire));
+      PtrTag head_tag(head_tag_.load(std::memory_order_acquire));
       while (head_tag != PtrTag::end_of_list)
       {
         PtrTag new_head_tag = head_tag.next();
@@ -139,11 +139,11 @@ class SimpleSegregatedStorage : public memory::SimpleSegregatedStorage
          */
 
         // The std::memory_order_acquire is used in case of failure and required for the next
-        // read of m_next at the top of the current loop (the previous line).
+        // read of next_ at the top of the current loop (the previous line).
         if (AI_LIKELY(CAS_head_tag(head_tag, new_head_tag, std::memory_order_acquire)))
           // Return the old head.
           return head_tag.ptr();
-        // m_head_tag was changed (the new value is now in `head_tag`). Try again with the new value.
+        // head_tag_ was changed (the new value is now in `head_tag`). Try again with the new value.
       }
       // Reached the end of the list, try to allocate more memory.
       if (!try_allocate_more(add_new_block))
@@ -155,31 +155,31 @@ class SimpleSegregatedStorage : public memory::SimpleSegregatedStorage
 class MemoryPool : public memory::MemoryPagePool
 {
  private:
-  // Replace m_sss with our own class (defined above).
-  SimpleSegregatedStorage m_sss;
+  // Replace sss_ with our own class (defined above).
+  SimpleSegregatedStorage sss_;
 
  public:
   // And use it.
   // These are exact copies of memory::MemoryPagePool::allocate and memory::MemoryPagePool::deallocate.
   void* allocate() override
   {
-    return m_sss.allocate([this](){
-        // This runs in the critical area of SimpleSegregatedStorage::m_add_block_mutex.
-        blocks_t extra_blocks = std::clamp(m_pool_blocks, m_minimum_chunk_size, m_maximum_chunk_size);
-        size_t extra_size = extra_blocks * m_block_size;
+    return sss_.allocate([this](){
+        // This runs in the critical area of SimpleSegregatedStorage::add_block_mutex_.
+        blocks_t extra_blocks = std::clamp(pool_blocks_, minimum_chunk_size_, maximum_chunk_size_);
+        size_t extra_size = extra_blocks * block_size_;
         void* chunk = std::aligned_alloc(memory_page_size(), extra_size);
         if (AI_UNLIKELY(chunk == nullptr))
           return false;
-        m_sss.add_block(chunk, extra_size, m_block_size);
-        m_pool_blocks += extra_blocks;
-        m_chunks.push_back(chunk);
+        sss_.add_block(chunk, extra_size, block_size_);
+        pool_blocks_ += extra_blocks;
+        chunks_.push_back(chunk);
         return true;
     });
   }
 
   void deallocate(void* ptr) override
   {
-    m_sss.deallocate(ptr);
+    sss_.deallocate(ptr);
   }
 
   // Inherit all constructors.
