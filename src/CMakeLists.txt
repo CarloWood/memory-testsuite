@@ -14,3 +14,6 @@ target_link_libraries(pool_test PRIVATE ${AICXX_OBJECTS_LIST})
 
 add_executable(ABA_test ABA_test.cxx)
 target_link_libraries(ABA_test PRIVATE ${AICXX_OBJECTS_LIST})
+
+add_executable(MemoryMappedPool_constructor MemoryMappedPool_constructor.cxx)
+target_link_libraries(MemoryMappedPool_constructor PRIVATE ${AICXX_OBJECTS_LIST})

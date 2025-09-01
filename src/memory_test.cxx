@@ -1,5 +1,8 @@
 #include "sys.h"
 #include "memory/MemoryPagePool.h"
+#include "memory/MemoryMappedPool.h"
+#include "utils/AIAlert.h"
+#include "utils/debug_ostream_operators.h"
 #include "utils/threading/Gate.h"
 #if defined(__OPTIMIZE__)
 #include "cwds/benchmark.h"
@@ -10,11 +13,28 @@
 #include <random>
 #include "debug.h"
 
-int const iterations = 250000;
+// Define this to 0 to test MemoryPagePool, and to 1 to test MemoryMappedPool.
+#define TEST_MAPPED 0
+#define HUGE 0
+
+#if HUGE
+size_t const mmap_file_size = 0x1000UL * 16 * 1024 * 1024;
+int const iterations = 500000;
 int const producer_thread_count = 16;
 int const consumer_thread_count = 16;
+#else
+size_t const mmap_file_size = 0x1000UL * 4 * 1024 * 1024;
+int const iterations = 250000;
+int const producer_thread_count = 8;
+int const consumer_thread_count = 8;
+#endif
+
 int const total_threads = producer_thread_count + consumer_thread_count;
-memory::MemoryPagePool mpp(0x1000, 2, 1024 * 1024);
+#if TEST_MAPPED
+using MemoryPool = memory::MemoryMappedPool;
+#else
+using MemoryPool = memory::MemoryPagePool;
+#endif
 
 std::mutex cvm;
 std::condition_variable cv;
@@ -32,7 +52,7 @@ void wait_for_threads(int n)
     cv.wait(lk, [n](){ return thread_count == n; });
 }
 
-void producer(int thread, utils::threading::Gate& consumers_joined)
+void producer(int thread, utils::threading::Gate& consumers_joined, MemoryPool& mpp)
 {
   Debug(NAMESPACE_DEBUG::init_thread(std::string("Producer ") + std::to_string(thread)));
 
@@ -44,6 +64,10 @@ void producer(int thread, utils::threading::Gate& consumers_joined)
   for (int i = 0; i != iterations; ++i)
   {
     void* ptr = mpp.allocate();
+    if (ptr == nullptr)
+    {
+      DoutFatal(dc::core, "Out Of Memory. Is the mmap file large enough?");
+    }
     *static_cast<int*>(ptr) = i;
     blocks[i] = ptr;
   }
@@ -67,7 +91,7 @@ void producer(int thread, utils::threading::Gate& consumers_joined)
   Dout(dc::notice|flush_cf, "Leaving thread!");
 }
 
-void consumer(int thread)
+void consumer(int thread, MemoryPool& mpp)
 {
   Debug(NAMESPACE_DEBUG::init_thread(std::string("Consumer ") + std::to_string(thread)));
 
@@ -76,6 +100,10 @@ void consumer(int thread)
   for (int i = 0; i != iterations; ++i)
   {
     void* ptr = mpp.allocate();
+    if (ptr == nullptr)
+    {
+      DoutFatal(dc::core, "Out Of Memory. Is the mmap file large enough?");
+    }
     *static_cast<int*>(ptr) = i;
     blocks[i] = ptr;
   }
@@ -117,22 +145,39 @@ int main()
   Debug(NAMESPACE_DEBUG::init());
   Dout(dc::notice, "Entered main()...");
 
+  MemoryPool* mpp_ptr;
+  try
+  {
+#if TEST_MAPPED
+    mpp_ptr = new memory::MemoryMappedPool("/opt/cache/secondlife/mmap.img", 0x1000UL,
+        mmap_file_size, memory::MemoryMappedPool::Mode::persistent, true);
+#else
+    mpp_ptr = new memory::MemoryPagePool(0x1000UL, 2, 1024 * 1024);
+#endif
+  }
+  catch (AIAlert::Error const& error)
+  {
+    DoutFatal(dc::core, error);
+  }
+
   std::vector<std::thread> producer_threads;
   std::vector<std::thread> consumer_threads;
 
   utils::threading::Gate consumers_joined;
 
   for (int i = 0; i != producer_thread_count; ++i)
-    producer_threads.emplace_back([i, &consumers_joined](){ producer(i, consumers_joined); });
+    producer_threads.emplace_back([i, &consumers_joined, mpp_ptr](){ producer(i, consumers_joined, *mpp_ptr); });
 
   for (int i = 0; i != consumer_thread_count; ++i)
-    consumer_threads.emplace_back([i](){ consumer(i); });
+    consumer_threads.emplace_back([i, mpp_ptr](){ consumer(i, *mpp_ptr); });
 
   for (auto& t : consumer_threads)
     t.join();
   consumers_joined.open();
   for (auto& t : producer_threads)
     t.join();
+
+  delete mpp_ptr;
 
   Dout(dc::notice, "Leaving main()...");
 }
