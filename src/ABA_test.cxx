@@ -2,6 +2,7 @@
 #include "utils/threading/Gate.h"
 #include <atomic>
 #include <thread>
+#include <cstring>
 #include "debug.h"
 
 // Define this to 0 to test MemoryPagePool, and to 1 to test MemoryMappedPool.

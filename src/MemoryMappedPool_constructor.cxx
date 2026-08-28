@@ -1,4 +1,5 @@
 #include "sys.h"
+#include <array>
 #include "debug.h"
 
 int main()
